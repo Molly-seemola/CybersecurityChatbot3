@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Media;                  // ← Added for voice greeting (Part 1 & 2)
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -12,7 +13,7 @@ namespace CybersecurityChatbot
     /// Main WPF window — the GUI entry point for the entire application.
     /// Combines all features from Parts 1, 2, and 3 in a single cohesive interface.
     ///
-    /// Part 1: ASCII art, basic chatbot responses.
+    /// Part 1: ASCII art, voice greeting, basic chatbot responses.
     /// Part 2: GUI, keyword recognition, random responses, sentiment, memory/recall, conversation flow.
     /// Part 3 Task 1: Task Manager with MySQL database integration.
     /// Part 3 Task 2: Cybersecurity Quiz mini-game.
@@ -25,21 +26,22 @@ namespace CybersecurityChatbot
     public partial class MainWindow : Window
     {
         // ── Core engine instances ────────────────────────────────────────────
-        private readonly ChatbotEngine _bot = new(); // Part 1 & 2: responses, memory, sentiment
-        private readonly NlpEngine _nlp = new(); // Part 3 Task 3: intent detection
-        private readonly QuizManager _quiz = new(); // Part 3 Task 2: quiz mini-game
-        private readonly ActivityLog _log = new(); // Part 3 Task 4: activity tracking
-        private List<TaskItem> _tasks = new(); // In-memory task list (synced with DB)
+        private readonly ChatbotEngine _bot   = new(); // Part 1 & 2: responses, memory, sentiment
+        private readonly NlpEngine     _nlp   = new(); // Part 3 Task 3: intent detection
+        private readonly QuizManager   _quiz  = new(); // Part 3 Task 2: quiz mini-game
+        private readonly ActivityLog   _log   = new(); // Part 3 Task 4: activity tracking
+        private List<TaskItem>         _tasks = new(); // In-memory task list (synced with DB)
 
         // ── Reminder conversation state ──────────────────────────────────────
         // Tracks whether the bot is waiting for the user to confirm a reminder
         // after adding a task via chat (Part 3 Task 1 multi-turn conversation).
-        private bool _awaitingReminder = false;
-        private TaskItem _pendingTask = null;
+        private bool      _awaitingReminder = false;
+private TaskItem? _pendingTask      = null;  // ← Add ? to make it nullable
 
         /// <summary>
         /// Initialises the main window, sets up the database,
-        /// loads existing tasks, and displays the Part 1 ASCII art welcome.
+        /// loads existing tasks, plays the voice greeting (Part 1 & 2),
+        /// and displays the ASCII art welcome message.
         /// </summary>
         public MainWindow()
         {
@@ -51,11 +53,63 @@ namespace CybersecurityChatbot
             // Load any previously saved tasks from MySQL
             LoadTasksFromDb();
 
+            // Part 1 & 2: Play voice greeting WAV file on startup
+            PlayVoiceGreeting();
+
             // Part 1: Display ASCII art banner in monospace font
             AddBotMessage(ChatbotEngine.AsciiArt, isCode: true);
 
             // Welcome message — asks for name to enable Part 2 memory/recall
             AddBotMessage("👋 Welcome to CyberBot — your Cybersecurity Awareness Assistant!\n\nWhat's your name?");
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  VOICE GREETING (Part 1 & 2)
+        // ════════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// Plays the WAV voice greeting file on application startup.
+        /// Part 1 and Part 2 requirement: voice greeting carried into Part 3.
+        ///
+        /// Setup Instructions:
+        /// 1. Add your greeting.wav file to the project root.
+        /// 2. Click the file in Solution Explorer.
+        /// 3. Set Build Action = Content.
+        /// 4. Set Copy to Output Directory = Copy Always.
+        ///
+        /// To generate a WAV file using PowerShell:
+        /// Add-Type -AssemblyName System.Speech
+        /// $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+        /// $synth.SetOutputToWaveFile("C:\Users\YourName\Desktop\greeting.wav")
+        /// $synth.Speak("Welcome to CyberBot, your cybersecurity awareness assistant.")
+        /// $synth.Dispose()
+        /// </summary>
+        private void PlayVoiceGreeting()
+        {
+            try
+            {
+                // Build the path to greeting.wav in the application's output folder
+                string wavPath = System.IO.Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory, "greeting.wav");
+
+                if (System.IO.File.Exists(wavPath))
+                {
+                    // Play asynchronously so the UI doesn't freeze during playback
+                    SoundPlayer player = new SoundPlayer(wavPath);
+                    player.Play();
+                    _log.Add("Voice greeting played on startup.");
+                }
+                else
+                {
+                    // WAV file not found — log it but don't crash the application
+                    _log.Add("Voice greeting: greeting.wav not found in output folder.");
+                }
+            }
+            catch (Exception ex)
+            {
+                // Sound failure should never crash the app — just log the error
+                _log.Add($"Voice greeting error: {ex.Message}");
+            }
         }
 
         // ════════════════════════════════════════════════════════════════
@@ -68,22 +122,22 @@ namespace CybersecurityChatbot
         /// </summary>
         private void ShowPanel(UIElement panel)
         {
-            ChatPanel.Visibility = Visibility.Collapsed;
+            ChatPanel.Visibility  = Visibility.Collapsed;
             TasksPanel.Visibility = Visibility.Collapsed;
-            QuizPanel.Visibility = Visibility.Collapsed;
-            LogPanel.Visibility = Visibility.Collapsed;
-            panel.Visibility = Visibility.Visible;
+            QuizPanel.Visibility  = Visibility.Collapsed;
+            LogPanel.Visibility   = Visibility.Collapsed;
+            panel.Visibility      = Visibility.Visible;
         }
 
         // Navigation button click handlers — each logs the navigation action
         private void BtnChat_Click(object s, RoutedEventArgs e)
-        { ShowPanel(ChatPanel); _log.Add("Navigated to Chat"); RefreshLog(); }
+        { ShowPanel(ChatPanel);  _log.Add("Navigated to Chat");         RefreshLog(); }
 
         private void BtnTasks_Click(object s, RoutedEventArgs e)
         { ShowPanel(TasksPanel); _log.Add("Navigated to Task Manager"); RefreshLog(); RefreshTaskList(); }
 
         private void BtnQuiz_Click(object s, RoutedEventArgs e)
-        { ShowPanel(QuizPanel); _log.Add("Navigated to Quiz"); RefreshLog(); }
+        { ShowPanel(QuizPanel);  _log.Add("Navigated to Quiz");         RefreshLog(); }
 
         private void BtnLog_Click(object s, RoutedEventArgs e)
         { ShowPanel(LogPanel); RefreshLog(); }
@@ -245,7 +299,7 @@ namespace CybersecurityChatbot
             if (!string.IsNullOrEmpty(parsed.ReminderTime))
             {
                 // Reminder was specified inline — save immediately with reminder
-                _pendingTask.ReminderInfo = parsed.ReminderTime;
+                _pendingTask.ReminderInfo = parsed.ReminderTime ?? string.Empty;
                 SaveTask(_pendingTask);
                 AddBotMessage($"✅ Task added: '{title}'\n⏰ Reminder set for {parsed.ReminderTime}.");
                 _log.Add($"Task added: '{title}' (Reminder: {parsed.ReminderTime})");
@@ -263,7 +317,8 @@ namespace CybersecurityChatbot
 
         /// <summary>
         /// Handles the user's response to the reminder confirmation prompt.
-        /// Part 3 Task 1: Supports "remind me in X days" conversation as shown in rubric example.
+        /// Part 3 Task 1: Supports "remind me in X days" conversation as shown
+        /// in the rubric example interaction.
         /// </summary>
         private void HandleReminderConfirmation(string input)
         {
@@ -279,7 +334,7 @@ namespace CybersecurityChatbot
             }
 
             // User confirmed — extract the reminder time using NLP
-            var parsed = _nlp.Parse(input);
+            var parsed      = _nlp.Parse(input);
             string reminder = parsed.ReminderTime ?? input.Trim();
 
             if (_pendingTask != null)
@@ -306,7 +361,7 @@ namespace CybersecurityChatbot
         /// </summary>
         private void HandleSetReminderFromChat(NlpEngine.ParsedIntent parsed)
         {
-            string time = parsed.ReminderTime ?? parsed.ExtractedContent ?? "at an unspecified time";
+            string time    = parsed.ReminderTime ?? parsed.ExtractedContent ?? "at an unspecified time";
             string content = Cap(parsed.ExtractedContent ?? "your task");
             var task = new TaskItem(content, "Reminder via chat", time);
             SaveTask(task);
@@ -337,7 +392,7 @@ namespace CybersecurityChatbot
             if (int.TryParse(content.Trim(), out int num) && num >= 1 && num <= _tasks.Count)
             {
                 var t = _tasks[num - 1];
-                DatabaseHelper.CompleteTask(t.Id); // UPDATE in DB
+                DatabaseHelper.CompleteTask(t.Id);
                 _log.Add($"Task completed: '{t.Title}'");
                 LoadTasksFromDb();
                 RefreshTaskList();
@@ -356,7 +411,7 @@ namespace CybersecurityChatbot
             if (int.TryParse(content.Trim(), out int num) && num >= 1 && num <= _tasks.Count)
             {
                 var t = _tasks[num - 1];
-                DatabaseHelper.DeleteTask(t.Id); // DELETE from DB
+                DatabaseHelper.DeleteTask(t.Id);
                 _log.Add($"Task deleted: '{t.Title}'");
                 LoadTasksFromDb();
                 RefreshTaskList();
@@ -377,15 +432,22 @@ namespace CybersecurityChatbot
         private void BtnAddTask_Click(object s, RoutedEventArgs e)
         {
             string title = TxtTaskTitle.Text.Trim();
-            string desc = TxtTaskDesc.Text.Trim();
-            string rem = TxtReminder.Text.Trim();
+            string desc  = TxtTaskDesc.Text.Trim();
+            string rem   = TxtReminder.Text.Trim();
 
             // Validate required field
             if (string.IsNullOrEmpty(title))
             { MessageBox.Show("Please enter a task title.", "CyberBot"); return; }
 
-            var task = new TaskItem(title, desc, string.IsNullOrEmpty(rem) ? null : rem);
-            SaveTask(task); // Saves to DB and refreshes list
+            // Build TaskItem using the variables defined above
+            var task = new TaskItem
+            {
+                Title = title,
+                Description = desc,
+                ReminderInfo = string.IsNullOrEmpty(rem) ? string.Empty : rem
+            };
+
+            SaveTask(task);
 
             _log.Add($"Task added via UI: '{title}'" +
                      (string.IsNullOrEmpty(rem) ? "" : $" (Reminder: {rem})"));
@@ -428,8 +490,8 @@ namespace CybersecurityChatbot
         /// </summary>
         private void SaveTask(TaskItem task)
         {
-            int id = DatabaseHelper.AddTask(task); // INSERT into DB
-            task.Id = id;                            // Update in-memory object with DB Id
+            int id  = DatabaseHelper.AddTask(task);
+            task.Id = id;
             LoadTasksFromDb();
             RefreshTaskList();
         }
@@ -437,7 +499,7 @@ namespace CybersecurityChatbot
         /// <summary>Reloads the task list from MySQL into the in-memory _tasks list.</summary>
         private void LoadTasksFromDb() => _tasks = DatabaseHelper.GetAllTasks();
 
-        /// <summary>Refreshes the TaskListView control to reflect the current _tasks list.</summary>
+        /// <summary>Refreshes the TaskListView to reflect the current _tasks list.</summary>
         private void RefreshTaskList()
         {
             TaskListView.Items.Clear();
@@ -455,19 +517,18 @@ namespace CybersecurityChatbot
         private void BtnStartQuiz_Click(object s, RoutedEventArgs e)
         {
             _quiz.Start();
-            BtnStartQuiz.Visibility = Visibility.Collapsed; // Hide start button during quiz
+            BtnStartQuiz.Visibility = Visibility.Collapsed;
             _log.Add("Quiz started");
             ShowCurrentQuestion();
         }
 
         /// <summary>
         /// Renders the current quiz question and answer option buttons.
-        /// Shows the question type (MC or T/F) and question number in the status bar.
+        /// Shows question type (MC or T/F) and question number in the status bar.
         /// Displays final score and feedback when all questions are answered.
         /// </summary>
         private void ShowCurrentQuestion()
         {
-            // Clear previous question UI
             QuizOptionsPanel.Children.Clear();
             TxtQuizFeedback.Visibility = Visibility.Collapsed;
 
@@ -476,49 +537,43 @@ namespace CybersecurityChatbot
             // All questions answered — show results
             if (q == null)
             {
-                string fb = _quiz.GetFinalFeedback(); // Score-based feedback message
+                string fb = _quiz.GetFinalFeedback();
                 TxtQuizQuestion.Text =
                     $"🎉 Quiz Complete!\n\nScore: {_quiz.Score} / {_quiz.TotalQuestions}\n\n{fb}";
-                TxtQuizStatus.Text = "";
+                TxtQuizStatus.Text   = "";
                 _log.Add($"Quiz completed — Score: {_quiz.Score}/{_quiz.TotalQuestions}");
-
-                // Show restart button
-                BtnStartQuiz.Content = "🔄  Restart Quiz";
+                BtnStartQuiz.Content    = "🔄  Restart Quiz";
                 BtnStartQuiz.Visibility = Visibility.Visible;
                 return;
             }
 
             // Show question type and progress
             string type = q.Type == QuestionType.TrueFalse ? "True/False" : "Multiple Choice";
-            TxtQuizStatus.Text = $"Question {_quiz.CurrentIndex + 1} of {_quiz.TotalQuestions}  |  Score: {_quiz.Score}  |  {type}";
+            TxtQuizStatus.Text   = $"Question {_quiz.CurrentIndex + 1} of {_quiz.TotalQuestions}  |  Score: {_quiz.Score}  |  {type}";
             TxtQuizQuestion.Text = q.Question;
 
             // Dynamically generate answer option buttons
             for (int i = 0; i < q.Options.Count; i++)
             {
-                int idx = i; // Capture loop variable for click handler closure
-
-                // Label: "True"/"False" for T/F, "A. ..."/"B. ..." for MC
+                int idx = i;
                 string label = q.Type == QuestionType.TrueFalse
                     ? q.Options[i]
                     : $"{(char)('A' + i)}.  {q.Options[i]}";
 
                 var btn = new Button
                 {
-                    Content = label,
+                    Content    = label,
                     Background = new SolidColorBrush(Color.FromRgb(49, 50, 68)),
                     Foreground = Brushes.White,
-                    FontSize = 13,
-                    Height = 44,
-                    Margin = new Thickness(0, 4, 0, 4),
-                    Cursor = Cursors.Hand,
+                    FontSize   = 13,
+                    Height     = 44,
+                    Margin     = new Thickness(0, 4, 0, 4),
+                    Cursor     = Cursors.Hand,
                     BorderThickness = new Thickness(0),
                     HorizontalContentAlignment = HorizontalAlignment.Left,
-                    Padding = new Thickness(14, 0, 0, 0),
-                    Template = RoundedTemplate() // Apply rounded corner style
+                    Padding  = new Thickness(14, 0, 0, 0),
+                    Template = RoundedTemplate()
                 };
-
-                // Attach click handler with captured index
                 btn.Click += (_, _) => AnswerSelected(idx);
                 QuizOptionsPanel.Children.Add(btn);
             }
@@ -527,32 +582,30 @@ namespace CybersecurityChatbot
         /// <summary>
         /// Processes the user's answer selection.
         /// Disables all buttons to prevent double-answering,
-        /// shows coloured feedback (green = correct, red = incorrect),
-        /// then automatically advances to the next question after 2.5 seconds.
+        /// shows coloured feedback, then auto-advances after 2.5 seconds.
         /// </summary>
         private void AnswerSelected(int idx)
         {
-            // Disable all option buttons immediately to prevent re-clicking
+            // Disable all option buttons to prevent re-clicking
             foreach (var child in QuizOptionsPanel.Children)
                 if (child is Button b) b.IsEnabled = false;
 
-            // Submit answer and get result
             var (correct, explanation) = _quiz.SubmitAnswer(idx);
 
-            // Show feedback text with appropriate colour
+            // Show feedback with green (correct) or red (incorrect)
             TxtQuizFeedback.Text = correct
                 ? $"✅ Correct!\n{explanation}"
                 : $"❌ Incorrect.\n{explanation}";
             TxtQuizFeedback.Foreground = correct
-                ? new SolidColorBrush(Color.FromRgb(166, 227, 161)) // Green
-                : new SolidColorBrush(Color.FromRgb(243, 139, 168)); // Red
+                ? new SolidColorBrush(Color.FromRgb(166, 227, 161))
+                : new SolidColorBrush(Color.FromRgb(243, 139, 168));
             TxtQuizFeedback.Visibility = Visibility.Visible;
 
             _log.Add($"Quiz Q{_quiz.CurrentIndex}: {(correct ? "Correct" : "Incorrect")}");
 
             // Auto-advance to next question after 2.5 seconds
             var timer = new System.Windows.Threading.DispatcherTimer
-            { Interval = TimeSpan.FromSeconds(2.5) };
+                { Interval = TimeSpan.FromSeconds(2.5) };
             timer.Tick += (_, _) => { timer.Stop(); ShowCurrentQuestion(); };
             timer.Start();
         }
@@ -564,12 +617,11 @@ namespace CybersecurityChatbot
         /// <summary>
         /// Refreshes the Activity Log ListBox with all current log entries.
         /// Part 3 Task 4: Displays all actions with timestamps in the Log panel.
-        /// Called whenever the log panel is opened or an entry is cleared.
         /// </summary>
         private void RefreshLog()
         {
             LogListBox.Items.Clear();
-            foreach (var entry in _log.GetAll()) // GetAll() = "show more" full history
+            foreach (var entry in _log.GetAll())
                 LogListBox.Items.Add(entry);
         }
 
@@ -582,55 +634,56 @@ namespace CybersecurityChatbot
         // ════════════════════════════════════════════════════════════════
 
         /// <summary>
-        /// Creates and adds a user message bubble to the chat (right-aligned, dark purple).
+        /// Creates and adds a user message bubble to the chat
+        /// (right-aligned, dark purple background).
         /// </summary>
         private void AddUserMessage(string text)
         {
             var border = new Border
             {
-                Background = new SolidColorBrush(Color.FromRgb(49, 50, 68)),
-                CornerRadius = new CornerRadius(12, 12, 2, 12), // Rounded except bottom-right
-                Padding = new Thickness(12, 8, 12, 8),
-                Margin = new Thickness(80, 4, 12, 4),
+                Background   = new SolidColorBrush(Color.FromRgb(49, 50, 68)),
+                CornerRadius = new CornerRadius(12, 12, 2, 12),
+                Padding      = new Thickness(12, 8, 12, 8),
+                Margin       = new Thickness(80, 4, 12, 4),
                 HorizontalAlignment = HorizontalAlignment.Right,
                 Child = new TextBlock
                 {
-                    Text = text,
-                    Foreground = Brushes.White,
-                    FontSize = 13,
+                    Text         = text,
+                    Foreground   = Brushes.White,
+                    FontSize     = 13,
                     TextWrapping = TextWrapping.Wrap
                 }
             };
             ChatStack.Children.Add(border);
-            ChatScroll.ScrollToBottom(); // Always scroll to newest message
+            ChatScroll.ScrollToBottom();
         }
 
         /// <summary>
-        /// Creates and adds a bot message bubble to the chat (left-aligned, dark blue).
-        /// Supports a monospace code style for ASCII art display (Part 1).
+        /// Creates and adds a bot message bubble to the chat
+        /// (left-aligned, dark blue background).
+        /// Supports monospace code style for ASCII art (Part 1).
         /// </summary>
         /// <param name="text">The message text to display.</param>
-        /// <param name="isCode">If true, uses Consolas font for ASCII art rendering.</param>
+        /// <param name="isCode">If true, uses Consolas font for ASCII art.</param>
         private void AddBotMessage(string text, bool isCode = false)
         {
             var tb = new TextBlock
             {
-                Text = text,
-                Foreground = new SolidColorBrush(Color.FromRgb(205, 214, 244)),
-                // Part 1: Use Consolas for ASCII art, Segoe UI for normal messages
-                FontSize = isCode ? 11 : 13,
-                FontFamily = isCode ? new FontFamily("Consolas") : new FontFamily("Segoe UI"),
+                Text         = text,
+                Foreground   = new SolidColorBrush(Color.FromRgb(205, 214, 244)),
+                FontSize     = isCode ? 11 : 13,
+                FontFamily   = isCode
+                    ? new FontFamily("Consolas")
+                    : new FontFamily("Segoe UI"),
                 TextWrapping = TextWrapping.Wrap,
-                MaxWidth = 550
+                MaxWidth     = 550
             };
 
-            // Add robot emoji icon for normal messages (not for ASCII art)
             var sp = new StackPanel { Orientation = Orientation.Horizontal };
             if (!isCode)
                 sp.Children.Add(new TextBlock
                 {
-                    Text = "🤖",
-                    FontSize = 15,
+                    Text = "🤖", FontSize = 15,
                     VerticalAlignment = VerticalAlignment.Top,
                     Margin = new Thickness(0, 2, 8, 0)
                 });
@@ -638,10 +691,10 @@ namespace CybersecurityChatbot
 
             var border = new Border
             {
-                Background = new SolidColorBrush(Color.FromRgb(30, 30, 58)),
-                CornerRadius = new CornerRadius(12, 12, 12, 2), // Rounded except bottom-left
-                Padding = new Thickness(12, 8, 12, 8),
-                Margin = new Thickness(12, 4, 80, 4),
+                Background   = new SolidColorBrush(Color.FromRgb(30, 30, 58)),
+                CornerRadius = new CornerRadius(12, 12, 12, 2),
+                Padding      = new Thickness(12, 8, 12, 8),
+                Margin       = new Thickness(12, 4, 80, 4),
                 HorizontalAlignment = HorizontalAlignment.Left,
                 Child = sp
             };
@@ -654,15 +707,13 @@ namespace CybersecurityChatbot
         // ════════════════════════════════════════════════════════════════
 
         /// <summary>
-        /// Generates a reusable rounded corner ControlTemplate for quiz buttons.
+        /// Generates a rounded corner ControlTemplate for quiz option buttons.
         /// Created programmatically since quiz buttons are generated dynamically.
         /// </summary>
         private ControlTemplate RoundedTemplate()
         {
-            var t = new ControlTemplate(typeof(Button));
+            var t   = new ControlTemplate(typeof(Button));
             var fef = new FrameworkElementFactory(typeof(Border));
-
-            // Bind background to the button's Background property
             fef.SetBinding(Border.BackgroundProperty,
                 new System.Windows.Data.Binding("Background")
                 {
@@ -670,8 +721,6 @@ namespace CybersecurityChatbot
                         System.Windows.Data.RelativeSourceMode.TemplatedParent)
                 });
             fef.SetValue(Border.CornerRadiusProperty, new CornerRadius(8));
-
-            // Content presenter with left-aligned padding
             var cp = new FrameworkElementFactory(typeof(ContentPresenter));
             cp.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
             cp.SetValue(ContentPresenter.MarginProperty, new Thickness(14, 0, 0, 0));

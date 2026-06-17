@@ -84,31 +84,23 @@ private TaskItem? _pendingTask      = null;  // ← Add ? to make it nullable
         /// $synth.Speak("Welcome to CyberBot, your cybersecurity awareness assistant.")
         /// $synth.Dispose()
         /// </summary>
+        // Plays text-to-speech greeting
         private void PlayVoiceGreeting()
         {
             try
             {
-                // Build the path to greeting.wav in the application's output folder
-                string wavPath = System.IO.Path.Combine(
-                    AppDomain.CurrentDomain.BaseDirectory, "greeting.wav");
+                // Create speech synthesizer object
+                var synth = new System.Speech.Synthesis.SpeechSynthesizer();
 
-                if (System.IO.File.Exists(wavPath))
-                {
-                    // Play asynchronously so the UI doesn't freeze during playback
-                    SoundPlayer player = new SoundPlayer(wavPath);
-                    player.Play();
-                    _log.Add("Voice greeting played on startup.");
-                }
-                else
-                {
-                    // WAV file not found — log it but don't crash the application
-                    _log.Add("Voice greeting: greeting.wav not found in output folder.");
-                }
+                // Set output device
+                synth.SetOutputToDefaultAudioDevice();
+
+                // Speak greeting message
+                synth.SpeakAsync("Hello! Welcome to the Cybersecurity Awareness Bot. I am here to help you stay safe online.");
             }
-            catch (Exception ex)
+            catch
             {
-                // Sound failure should never crash the app — just log the error
-                _log.Add($"Voice greeting error: {ex.Message}");
+                // Ignore errors if speech engine is unavailable
             }
         }
 
@@ -701,6 +693,7 @@ private TaskItem? _pendingTask      = null;  // ← Add ? to make it nullable
             ChatStack.Children.Add(border);
             ChatScroll.ScrollToBottom();
         }
+
 
         // ════════════════════════════════════════════════════════════════
         //  UTILITIES
